@@ -1,10 +1,10 @@
 # reddit_sentiment_algotrading
-NLP sentiment analysis trading algorithm that scrapes subreddits (eg. r/wallstreetbets for tsla)
+## NLP sentiment analysis trading algorithm that scrapes subreddits (eg. r/wallstreetbets for tsla)
     
-trading algorithm pseudocode:
-    \#initialize tradeable stocks list
-    \Iterate through list of stocks (only TSLA for now):
-        \if stock is tradeable
+### trading algorithm pseudocode:
+    #initialize tradeable stocks list
+    Iterate through list of stocks (only TSLA for now):
+        if stock is tradeable
         AND if stock's most recent news is positive
         AND if stock most recent news has been posted in last 30 minutes:
         AND stock volume < avg. volume:
