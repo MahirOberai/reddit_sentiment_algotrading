@@ -87,6 +87,8 @@ def replies_of(analyzer, top_level_comment):
     return sentiments
 
 def calculate_date_sentiments(analyzer, api, posts_list, analyze_comments):
+  pos = 0
+  neg = 1
   date_sentiments = {}
 
   for post in posts_list:
@@ -102,17 +104,24 @@ def calculate_date_sentiments(analyzer, api, posts_list, analyze_comments):
             comment_sentiments.append(top_comment_sentiment)
             for comment_sentiment in comment_sentiments:
               if (comment_sentiment == Sentiment.POSITIVE):
-                date_sentiments[post.created] = date_sentiments[post.created] + 1
+                pos += 1
+                #date_sentiments[post.created] = date_sentiments[post.created] + 1
+                
               elif (comment_sentiment == Sentiment.NEGATIVE):
-                date_sentiments[post.created] = date_sentiments[post.created] - 1
+                neg += 1
+                #date_sentiments[post.created] = date_sentiments[post.created] - 1
         except:
             continue
 
     title_sentiment = get_nltk_sentiment(analyzer, post.title)
 
     if (title_sentiment == Sentiment.POSITIVE):
-      date_sentiments[post.created] = date_sentiments[post.created] + 1
+      pos += 1
+      #date_sentiments[post.created] = date_sentiments[post.created] + 1
     elif (title_sentiment == Sentiment.NEGATIVE):
-      date_sentiments[post.created] = date_sentiments[post.created] - 1
+      neg += 1
+      #date_sentiments[post.created] = date_sentiments[post.created] - 1
+
+    date_sentiments[post.created] = pos/neg
 
   return date_sentiments

@@ -18,7 +18,7 @@ The query can either be a single string, or several strings separated by spaces 
 
 Try this:
 
-python3 broadwaybet.py --quandlkey="gA22YWcyysEyaNxu1jti" --start="01-04-2017" --end="12-30-2017" TSLA tesla 'Elon Musk'
+python3 broadwaybet.py --quandlkey="gA22YWcyysEyaNxu1jti" --start="01-24-2020" --end="01-24-2021" --no_output_csv=True --csv_out="out_test.csv" --quant_csv_out="test_quant.csv" TSLA tesla 'Elon Musk'
 """
 import argparse
 import datetime 
@@ -31,9 +31,10 @@ import matplotlib
 matplotlib.use('Agg')
 
 
-import seaborn
+#import seaborn
 
 import quandl
+import yfinance as yf
 import praw
 from alphalens.tears import create_returns_tear_sheet
 from alphalens.utils import get_clean_factor_and_forward_returns
@@ -44,9 +45,10 @@ from reddit import query_subreddit
 from sentiment import get_sentiment_analyzer, calculate_date_sentiments
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--start', default="01-04-2017")
-parser.add_argument('--end',  default="12-30-2017") #03/27/2018 is the last date in WIKI/PRICES database
+parser.add_argument('--start', default="01-24-2020")
+parser.add_argument('--end',  default="01-24-2021") #03/27/2018 is the last date in WIKI/PRICES database
 parser.add_argument('--analyze_comments', default=False)
+parser.add_argument('--no_output_csv', default=False)
 parser.add_argument('--reddit_client_id', default="hpAt82a0aMv8DQ")
 parser.add_argument('--reddit_client_secret', default="jI33vgtVVIvMJODsLmLEWtL-eP4")
 parser.add_argument('--reddit_user_agent', default="trading_sentiment")
@@ -57,6 +59,7 @@ parser.add_argument('--quandlkey', default="gA22YWcyysEyaNxu1jti")
 parser.add_argument('--ticker', default="TSLA")
 parser.add_argument('--sub', default="wallstreetbets")
 parser.add_argument('--csv_out', required=False, default="output.csv")
+parser.add_argument('--quant_csv_out', required=False, default="quant_output.csv")
 # parser.add_argument('--nobacktest', required=False, default=False)
 # parser.add_argument('--notearsheet', required=False, default=False)
 parser.add_argument('query', metavar='QUERY', nargs='+')
@@ -69,43 +72,48 @@ if __name__ == "__main__":
 
   posts_list = []
 
-  if (len(args.query) == 1):
-    print("Querying reddit for posts containing '{}'".format((args.query[0])))
-    posts_list = posts_list + query_subreddit(args.query[0], start_time, end_time, args.sub)
+  if args.no_output_csv: 
+    if (len(args.query) == 1):
+      print("Querying reddit for posts containing '{}'".format((args.query[0])))
+      posts_list = posts_list + query_subreddit(args.query[0], start_time, end_time, args.sub)
 
-  else: 
-    for query in args.query:
-      print("Querying reddit for posts containing '{}'".format(query))
-      posts_list = posts_list + query_subreddit(query, start_time, end_time, args.sub)
+    else: 
+      for query in args.query:
+        print("Querying reddit for posts containing '{}'".format(query))
+        posts_list = posts_list + query_subreddit(query, start_time, end_time, args.sub)
 
-  print("Calculating sentiments for posts: ",format(len(posts_list)))
+    print("Calculating sentiments for posts: ",format(len(posts_list)))
 
-  analyzer = get_sentiment_analyzer()
+    analyzer = get_sentiment_analyzer()
 
-  if args.analyze_comments:
-    print("Will calculate sentiments for comments. Will take some time.")
-    reddit_api = praw.Reddit(client_id=args.reddit_client_id,
-                          client_secret=args.reddit_client_secret,
-                          user_agent=args.reddit_user_agent,
-                          password=args.reddit_password,
-                          username=args.reddit_username)
+    if args.analyze_comments:
+      print("Will calculate sentiments for comments. Will take some time.")
+      reddit_api = praw.Reddit(client_id=args.reddit_client_id,
+                            client_secret=args.reddit_client_secret,
+                            user_agent=args.reddit_user_agent,
+                            password=args.reddit_password,
+                            username=args.reddit_username)
+    else:
+      print("Will not calculate sentiments for comments.")
+      reddit_api = None
+
+
+    date_sentiments = calculate_date_sentiments(analyzer, reddit_api, posts_list, args.analyze_comments)
+
+    dates = list(date_sentiments.keys())
+    dates.sort()
+
+    sentiment_scores = [date_sentiments[date] for date in dates]
+    sentiment_df_data = {'date': dates, 'score': sentiment_scores}
+
+    sentiment_df = pd.DataFrame(sentiment_df_data)
+    sentiment_df.to_csv(args.csv_out, index=False)
+
+    print('CSV file written to: {}'.format(args.csv_out))
+  
   else:
-    print("Will not calculate sentiments for comments.")
-    reddit_api = None
-
-
-  date_sentiments = calculate_date_sentiments(analyzer, reddit_api, posts_list, args.analyze_comments)
-
-  dates = list(date_sentiments.keys())
-  dates.sort()
-
-  sentiment_scores = [date_sentiments[date] for date in dates]
-  sentiment_df_data = {'date': dates, 'score': sentiment_scores}
-
-  sentiment_df = pd.DataFrame(sentiment_df_data)
-  sentiment_df.to_csv(args.csv_out, index=False)
-
-  print("CSV file written to: {}".format(args.csv_out))
+    print('Reading sentiments from: {}'.format(args.csv_out))
+    sentiment_df = pd.read_csv(args.csv_out)
 
   sentiment_df['date'] = pd.to_datetime(sentiment_df['date'])
 
@@ -118,24 +126,25 @@ if __name__ == "__main__":
             unique_date_score += score
 
     quantized_date_sentiments[unique_date] = unique_date_score       
-      
+
+  print(len(quantized_date_sentiments))
   quandl.ApiConfig.api_key = args.quandlkey
 
-  quandl_prices = quandl.get_table(
-    'WIKI/PRICES',
-    qopts = { 'columns': ['date', 'close'] },
-    ticker = args.ticker,
-    date = {
-      'gte': datetime.datetime.fromtimestamp(start_time.timestamp(), tz=pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
-      'lte': datetime.datetime.fromtimestamp(end_time.timestamp(), tz=pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
-    }
-  )
-  # quandl_prices = prices.set_index('date')
-  quandl_prices = list(quandl_prices.iterrows())
+  # quandl_prices = quandl.get_table(
+  #   'WIKI/PRICES',
+  #   qopts = { 'columns': ['date', 'close'] },
+  #   ticker = args.ticker,
+  #   date = {
+  #     'gte': datetime.datetime.fromtimestamp(start_time.timestamp(), tz=pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
+  #     'lte': datetime.datetime.fromtimestamp(end_time.timestamp(), tz=pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
+  #   }
+  # )
+  # # quandl_prices = prices.set_index('date')
+  # quandl_prices = list(quandl_prices.iterrows())
 
-  price_dict = {}
-  for row in quandl_prices:
-    price_dict[row[1][0]] = row[1][1]
+  # price_dict = {}
+  # for row in quandl_prices:
+  #   price_dict[row[1][0]] = row[1][1]
 
   full_index = pd.date_range(
     start=datetime.datetime.fromtimestamp(start_time.timestamp(), tz=pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
@@ -143,27 +152,37 @@ if __name__ == "__main__":
   )
 
   factors = []
-  prices = []
-  for date in full_index:
-    if (date in price_dict.keys()):
-      prices.append(price_dict[date])
-    else:
-      try:
-        prices.append(prices[-1])
-      except:
-        continue
+  # prices = []
+  # for date in full_index:
+  #   if (date in price_dict.keys()):
+  #     prices.append(price_dict[date])
+  #   else:
+  #     try:
+  #       prices.append(prices[-1])
+  #     except:
+  #       continue
     
-
+  for date in full_index:
     if (date.date() in quantized_date_sentiments.keys()):
-      factors.append(quantized_date_sentiments[date.date()])
+        factors.append(quantized_date_sentiments[date.date()])
+        print('hello')
     else:
-      factors.append(0)
+        factors.append(0)
   
-  prices = pd.DataFrame(index=full_index, columns=[args.ticker], data=prices)
+  #print(factors)
 
-  factor_series = pd.DataFrame(index=full_index, columns=[args.ticker], data=factors).rolling(window=3).mean().stack()
+  # prices = pd.DataFrame(index=full_index, columns=[args.ticker], data=prices)
 
-  #factor_series = pd.DataFrame(index=full_index, columns=[args.ticker], data=factors).stack()
+  # print(prices.head())
+
+  # factor_series = pd.DataFrame(index=full_index, columns=[args.ticker], data=factors).rolling(window=3).mean().stack()
+  factor_series = pd.DataFrame(columns=['score'], data=factors)
+  factor_series['date'] = full_index
+
+  print('Writing quantized sentiment data to quant_output.csv')
+  factor_series.to_csv(args.quant_csv_out)
+
+  #
 
   factor_data = get_clean_factor_and_forward_returns(
       factor_series,
