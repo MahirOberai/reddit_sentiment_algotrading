@@ -8,6 +8,7 @@ import time
 import requests
 import datetime
 from collections import namedtuple
+import pandas as pd
 
 import praw
 
