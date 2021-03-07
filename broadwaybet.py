@@ -33,13 +33,13 @@ matplotlib.use('Agg')
 
 #import seaborn
 
-#import quandl
-#import yfinance as yf
+import quandl
+import yfinance as yf
 import praw
-#from alphalens.tears import create_returns_tear_sheet
-#from alphalens.utils import get_clean_factor_and_forward_returns
-#import pyfolio as pf
-#import empyrical as em
+from alphalens.tears import create_returns_tear_sheet
+from alphalens.utils import get_clean_factor_and_forward_returns
+import pyfolio as pf
+import empyrical as em
 
 from reddit import query_subreddit
 from sentiment import get_sentiment_analyzer, calculate_date_sentiments
@@ -47,8 +47,8 @@ from sentiment import get_sentiment_analyzer, calculate_date_sentiments
 parser = argparse.ArgumentParser()
 parser.add_argument('--start', default="01-24-2020")
 parser.add_argument('--end',  default="01-24-2021") #03/27/2018 is the last date in WIKI/PRICES database
-parser.add_argument('--analyze_comments', default=True)
-parser.add_argument('--no_output_csv', default=True)
+parser.add_argument('--analyze_comments', default=False)
+parser.add_argument('--no_output_csv', default=False)
 parser.add_argument('--reddit_client_id', default="hpAt82a0aMv8DQ")
 parser.add_argument('--reddit_client_secret', default="jI33vgtVVIvMJODsLmLEWtL-eP4")
 parser.add_argument('--reddit_user_agent', default="trading_sentiment")
@@ -101,14 +101,12 @@ if __name__ == "__main__":
     date_sentiments = calculate_date_sentiments(analyzer, reddit_api, posts_list, args.analyze_comments)
 
     dates = list(date_sentiments.keys())
-    #dates.sort()
+    dates.sort()
 
     sentiment_scores = [date_sentiments[date] for date in dates]
     sentiment_df_data = {'date': dates, 'score': sentiment_scores}
 
     sentiment_df = pd.DataFrame(sentiment_df_data)
-    sentiment_df['date'] = sentiment_df['date'].dt.date
-    sentiment_df.sort_values(by=['date'])
     sentiment_df.to_csv(args.csv_out, index=False)
 
     print('CSV file written to: {}'.format(args.csv_out))
@@ -117,32 +115,20 @@ if __name__ == "__main__":
     print('Reading sentiments from: {}'.format(args.csv_out))
     sentiment_df = pd.read_csv(args.csv_out)
 
-  quantized_df = sentiment_df.groupby(['date']).mean()
-
-  print('Writing quantized sentiment data to: {}'.format(args.quant_csv_out))
-  quantized_df.to_csv(args.quant_csv_out)
-
-  #sentiment_df['date'] = pd.to_datetime(sentiment_df.date).dt.date
+  sentiment_df['date'] = pd.to_datetime(sentiment_df['date'])
 
 
-  # quantized_date_sentiments = {}
-  # for unique_date in sentiment_df['date'].dt.date.unique():
-  #   print(unique_date)
-  #   unique_date_score = 0
-  #   count = 0
-  #   for date, score in zip(sentiment_df['date'], sentiment_df['score']):
-  #       if date == unique_date:
-  #           count += 1
-  #           unique_date_score += score
-  #   quantized_date_sentiments[unique_date] = unique_date_score/count       
+  quantized_date_sentiments = {}
+  for unique_date in sentiment_df['date'].dt.date.unique():
+    unique_date_score = 0
+    for date, score in zip(sentiment_df['date'], sentiment_df['score']):
+        if date == unique_date:
+            unique_date_score += score
 
-  
+    quantized_date_sentiments[unique_date] = unique_date_score       
 
-  #quantized_df = pd.DataFrame(data = quantized_date_sentiments.values, index = quantized_date_sentiments.keys, columns = ['score'])
-  
-
-  #print(len(quantized_date_sentiments))
-  #quandl.ApiConfig.api_key = args.quandlkey
+  print(len(quantized_date_sentiments))
+  quandl.ApiConfig.api_key = args.quandlkey
 
   # quandl_prices = quandl.get_table(
   #   'WIKI/PRICES',
@@ -160,16 +146,12 @@ if __name__ == "__main__":
   # for row in quandl_prices:
   #   price_dict[row[1][0]] = row[1][1]
 
+  full_index = pd.date_range(
+    start=datetime.datetime.fromtimestamp(start_time.timestamp(), tz=pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
+    end=datetime.datetime.fromtimestamp(end_time.timestamp(), tz=pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
+  )
 
-
-  # full_index = pd.date_range(
-  #   start=datetime.datetime.fromtimestamp(start_time.timestamp(), tz=pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
-  #   end=datetime.datetime.fromtimestamp(end_time.timestamp(), tz=pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
-  # )
-
-  # factors = []
-
-  
+  factors = []
   # prices = []
   # for date in full_index:
   #   if (date in price_dict.keys()):
@@ -180,11 +162,12 @@ if __name__ == "__main__":
   #     except:
   #       continue
     
-  # for date in full_index:
-  #   if (date.date() in quantized_date_sentiments.keys()):
-  #       factors.append(quantized_date_sentiments[date.date()])
-  #   else:
-  #       factors.append(0)
+  for date in full_index:
+    if (date.date() in quantized_date_sentiments.keys()):
+        factors.append(quantized_date_sentiments[date.date()])
+        print('hello')
+    else:
+        factors.append(0)
   
   #print(factors)
 
@@ -193,42 +176,43 @@ if __name__ == "__main__":
   # print(prices.head())
 
   # factor_series = pd.DataFrame(index=full_index, columns=[args.ticker], data=factors).rolling(window=3).mean().stack()
-  # factor_series = pd.DataFrame(columns=['score'], data=factors)
-  # factor_series['date'] = full_index
+  factor_series = pd.DataFrame(columns=['score'], data=factors)
+  factor_series['date'] = full_index
 
-  
+  print('Writing quantized sentiment data to quant_output.csv')
+  factor_series.to_csv(args.quant_csv_out)
 
   #
 
-  # factor_data = get_clean_factor_and_forward_returns(
-  #     factor_series,
-  #     prices,
-  #     periods=(1, 5, 15), 
-  #     filter_zscore=None,
-  #     quantiles=None,
-  #     bins=1)
+  factor_data = get_clean_factor_and_forward_returns(
+      factor_series,
+      prices,
+      periods=(1, 5, 15), 
+      filter_zscore=None,
+      quantiles=None,
+      bins=1)
 
-  # factor_data.replace([np.inf, -np.inf], 0)
+  factor_data.replace([np.inf, -np.inf], 0)
 
-  # # replace this for a cleaner way to access the dates level in the multi-index dataframe
-  # index_values = list(factor_data.index.values)
+  # replace this for a cleaner way to access the dates level in the multi-index dataframe
+  index_values = list(factor_data.index.values)
 
-  # index_dates = []
-  # for i in range(0, len(index_values)):
-  #   index_dates.append(index_values[i][0])
+  index_dates = []
+  for i in range(0, len(index_values)):
+    index_dates.append(index_values[i][0])
 
-  # create_returns_tear_sheet(factor_data, long_short=False, group_neutral=False, by_group=False)
+  create_returns_tear_sheet(factor_data, long_short=False, group_neutral=False, by_group=False)
 
-  # plt.savefig("alphalens_tear_sheet.png")
+  plt.savefig("alphalens_tear_sheet.png")
 
-  # stock_rets = pd.Series(factor_data['1D'].values, index = index_dates)
+  stock_rets = pd.Series(factor_data['1D'].values, index = index_dates)
 
-  # # must run 'pip install git+https://github.com/quantopian/pyfolio'
-  # # also run 'pip install empyrical'
+  # must run 'pip install git+https://github.com/quantopian/pyfolio'
+  # also run 'pip install empyrical'
 
-  # f = pf.create_returns_tear_sheet(stock_rets, return_fig=True)
-  # f.savefig('stocks_tsla_titles.png')
+  f = pf.create_returns_tear_sheet(stock_rets, return_fig=True)
+  f.savefig('stocks_tsla_titles.png')
 
-  # import IPython; IPython.embed()
+  import IPython; IPython.embed()
   
   
