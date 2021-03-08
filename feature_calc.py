@@ -17,7 +17,7 @@ def calc_fourier_transform(sentiment_df):
     
     return sentiment_df
 
-def get_ticker_data(start, end, ticker):
+def get_ticker_data(pdr, start, end, ticker):
     """
     Get historical OHLC data for given date range and ticker.
     Tries to get from Investors Exchange (IEX), but falls back

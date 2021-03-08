@@ -7,7 +7,7 @@ import pytz
 import quandl
 import numpy as np
 import matplotlib.pylab as plt
-from feature_calc import calc_fourier_transform, get_ticker_data, calc_bollinger_bands, calculate_rsi_ewma_sma
+from feature_calc import calc_fourier_transform, get_ticker_data, calc_bollinger_bands, calc_rsi_ewma_sma
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score, train_test_split
