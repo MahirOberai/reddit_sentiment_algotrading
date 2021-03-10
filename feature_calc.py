@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+import pandas_datareader as pdr
 from sklearn import preprocessing
 
 gain = lambda x: x if x > 0 else 0 # works as a map function or in list comprehension
@@ -17,7 +19,7 @@ def calc_fourier_transform(sentiment_df):
     
     return sentiment_df
 
-def get_ticker_data(pdr, start, end, ticker):
+def get_ticker_data(start, end, ticker):
     """
     Get historical OHLC data for given date range and ticker.
     Tries to get from Investors Exchange (IEX), but falls back
@@ -41,9 +43,13 @@ def get_ticker_data(pdr, start, end, ticker):
 def calc_bollinger_bands(stock, window=14):
     rolling_mean = stock.Close.rolling(window).mean()
     rolling_std = stock.Close.rolling(window).std()
+    rolling_mean_s = stock.sentiment.rolling(window).mean()
+    rolling_std_s = stock.sentiment.rolling(window).std()
     upper_band = rolling_mean + (rolling_std*2)
     lower_band = rolling_mean - (rolling_std*2)
-    return upper_band, lower_band
+    upper_band_s = rolling_mean_s + (rolling_std_s*2)
+    lower_band_s = rolling_mean_s - (rolling_std_s*2)
+    return upper_band, lower_band, upper_band_s, lower_band_s
 
 def calc_rsi_ewma_sma(close, window_length):
     delta = close.diff()
